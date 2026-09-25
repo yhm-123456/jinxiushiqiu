@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#0A0A14" />
+<title>国庆 · 锦绣诗球</title>
+<style>
+  /* ============ 全局重置与主题变量 ============ */
+  :root{
+    --china-red:#C8102E;      /* 中国红 */
+    --china-red-deep:#8E0B1E; /* 深红 */
+    --gold:#FFD700;           /* 金色 */
+    --gold-soft:#F6E27A;      /* 柔金 */
+    --space:#0A0A14;          /* 深空蓝黑 */
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{
+    width:100%; height:100%; overflow:hidden;
+    background:var(--space);
+    font-family:"Microsoft YaHei","PingFang SC","Hiragino Sans GB","STKaiti","KaiTi",sans-serif;
+    color:#fff;
+    /* 移动端禁止页面滚动 / 橡皮筋 */
+    overscroll-behavior:none;
+    touch-action:none;
+    -webkit-user-select:none; user-select:none;
+  }
+  /* 3D 画布铺满全屏 */
+  #scene{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+
+  /* ============ 顶部标题栏 ============ */
+  #titleBar{
+    position:fixed; top:0; left:0; right:0; z-index:20;
+    padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 10px;
+    text-align:center; pointer-events:none;
+    background:linear-gradient(to bottom, rgba(10,10,20,.55), rgba(10,10,20,0));
+  }
+  #titleBar h1{
+    font-size:clamp(20px,5.2vw,34px);
+    font-weight:800; letter-spacing:.14em;
+    background:linear-gradient(180deg,#FFF6C9 0%,var(--gold) 45%,#E0A800 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 0 22px rgba(255,215,0,.28);
+  }
+  #titleBar .sub{
+    margin-top:5px; font-size:clamp(10px,2.7vw,13px);
+    letter-spacing:.34em; color:rgba(255,215,0,.72); font-weight:400;
+  }
+  #titleBar .stars-deco{ color:var(--gold); letter-spacing:.3em; font-size:11px; margin-top:3px; opacity:.85; }
+
+  /* ============ 画质切换按钮组 ============ */
+  #qualityBar{
+    position:fixed; top:calc(env(safe-area-inset-top,0px) + 14px); right:12px; z-index:30;
+    display:flex; gap:6px; background:rgba(20,10,14,.5);
+    border:1px solid rgba(255,215,0,.32); border-radius:999px; padding:4px;
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  }
+  #qualityBar button{
+    border:none; background:transparent; color:rgba(255,215,0,.6);
+    font-size:12px; padding:5px 11px; border-radius:999px; cursor:pointer;
+    font-family:inherit; transition:all .25s ease; letter-spacing:.05em;
+  }
+  #qualityBar button.active{
+    background:linear-gradient(135deg,var(--china-red),#E8324A);
+    color:#FFE9A8; box-shadow:0 0 12px rgba(200,16,46,.55); font-weight:700;
+  }
+
+  /* ============ 底部操作提示 ============ */
+  #hint{
+    position:fixed; bottom:calc(env(safe-area-inset-bottom,0px) + 16px); left:50%; transform:translateX(-50%);
+    z-index:20; pointer-events:none; text-align:center;
+    font-size:clamp(11px,3vw,13px); letter-spacing:.1em;
+    color:rgba(255,235,180,.72);
+    background:rgba(20,10,14,.42); border:1px solid rgba(255,215,0,.18);
+    padding:7px 16px; border-radius:999px;
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    transition:opacity .8s ease; white-space:nowrap;
+  }
+  #hint b{ color:var(--gold); font-weight:700; }
+
+  /* ============ 帧率/计数信息（调试用，低调显示）============ */
+  #stats{
+    position:fixed; left:12px; bottom:calc(env(safe-area-inset-bottom,0px) + 16px); z-index:20;
+    font-size:11px; color:rgba(255,215,0,.5); letter-spacing:.06em; pointer-events:none;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+  }
+
+  /* ============ 加载动画 ============ */
+  #loader{
+    position:fixed; inset:0; z-index:100; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:22px;
+    background:radial-gradient(circle at 50% 45%, #1a0d12 0%, var(--space) 70%);
+    transition:opacity .8s ease; text-align:center; padding:20px;
+  }
+  #loader.hide{ opacity:0; pointer-events:none; }
+  .spinner{
+    width:64px; height:64px; border-radius:50%;
+    border:3px solid rgba(255,215,0,.18); border-top-color:var(--gold);
+    animation:spin 1s linear infinite; box-shadow:0 0 26px rgba(200,16,46,.4);
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  #loader .lt{ font-size:17px; letter-spacing:.24em; color:var(--gold); }
+  #loader .ls{ font-size:12px; letter-spacing:.1em; color:rgba(255,235,180,.55); max-width:320px; line-height:1.7; }
+  #loader.err .spinner{ display:none; }
+  #loader.err .lt{ color:#FF6B6B; }
+
+  /* ============ 诗句详情卡片 ============ */
+  #cardMask{
+    position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
+    background:rgba(6,4,10,.62); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+    opacity:0; pointer-events:none; transition:opacity .32s ease; padding:22px;
+  }
+  #cardMask.show{ opacity:1; pointer-events:auto; }
+  #poemCard{
+    position:relative; width:min(430px,92vw); max-height:78vh; overflow:auto;
+    padding:34px 28px 30px; border-radius:20px; text-align:center;
+    background:linear-gradient(160deg,#B30E28 0%,var(--china-red) 42%,var(--china-red-deep) 100%);
+    border:1.5px solid rgba(255,215,0,.6);
+    box-shadow:0 18px 60px rgba(0,0,0,.6), 0 0 40px rgba(200,16,46,.4), inset 0 0 40px rgba(255,215,0,.06);
+    transform:translateY(18px) scale(.94); opacity:0;
+    transition:transform .38s cubic-bezier(.2,.9,.25,1.1), opacity .38s ease;
+  }
+  #cardMask.show #poemCard{ transform:translateY(0) scale(1); opacity:1; }
+  /* 卡片四角金色装饰 */
+  #poemCard::before,#poemCard::after{
+    content:""; position:absolute; width:26px; height:26px; border:2px solid var(--gold); opacity:.75;
+  }
+  #poemCard::before{ top:12px; left:12px; border-right:none; border-bottom:none; border-radius:6px 0 0 0; }
+  #poemCard::after{ bottom:12px; right:12px; border-left:none; border-top:none; border-radius:0 0 6px 0; }
+  .card-type{
+    display:inline-block; font-size:12px; letter-spacing:.18em; padding:4px 15px; border-radius:999px;
+    color:#5A0716; background:linear-gradient(135deg,#FFF0B0,var(--gold));
+    font-weight:700; box-shadow:0 3px 12px rgba(255,215,0,.35);
+  }
+  .card-star{ color:var(--gold); font-size:15px; letter-spacing:.4em; margin:16px 0 8px; text-shadow:0 0 12px rgba(255,215,0,.6); }
+  #cardText{
+    font-family:"STKaiti","KaiTi","Microsoft YaHei",serif;
+    font-size:clamp(19px,5.4vw,26px); line-height:1.85; font-weight:700;
+    color:#FFF7DC; text-shadow:0 2px 14px rgba(0,0,0,.4); letter-spacing:.04em;
+    margin:6px 0 18px;
+  }
+  #cardAuthor{ font-size:14px; color:var(--gold-soft); letter-spacing:.16em; }
+  #cardAuthor::before{ content:"—— "; opacity:.7; }
+  #cardClose{
+    position:absolute; top:12px; right:14px; width:30px; height:30px; border-radius:50%;
+    border:1px solid rgba(255,215,0,.5); background:rgba(0,0,0,.2); color:var(--gold);
+    font-size:17px; line-height:1; cursor:pointer; transition:all .2s ease; z-index:2;
+  }
+  #cardClose:hover{ background:var(--gold); color:var(--china-red-deep); transform:rotate(90deg); }
+  .card-footer{ margin-top:20px; font-size:11px; letter-spacing:.2em; color:rgba(255,235,180,.5); }
+</style>
+</head>
+<body>
+  <!-- 3D 渲染画布 -->
+  <div id="app"><canvas id="scene"></canvas></div>
+
+  <!-- 顶部标题 -->
+  <header id="titleBar">
+    <h1>国庆 · 锦绣诗球</h1>
+    <div class="sub">SPLENDID POETRY PLANET</div>
+    <div class="stars-deco">★ ★ ★ ★ ★</div>
+  </header>
+
+  <!-- 画质切换 -->
+  <div id="qualityBar">
+    <button data-q="high" class="active">高清</button>
+    <button data-q="medium">流畅</button>
+    <button data-q="low">省电</button>
+  </div>
+
+  <!-- 操作提示 -->
+  <div id="hint"><b>拖拽</b>旋转 · <b>滚轮/双指</b>缩放 · <b>双击</b>诗句查看详情</div>
+  <div id="stats"></div>
+
+  <!-- 加载动画 -->
+  <div id="loader">
+    <div class="spinner"></div>
+    <div class="lt">锦绣诗球 · 加载中</div>
+    <div class="ls" id="loaderTip">正在点亮 1949 颗星辰，铺展 77 句爱国诗词…</div>
+  </div>
+
+  <!-- 诗句详情卡片 -->
+  <div id="cardMask">
+    <div id="poemCard">
+      <button id="cardClose" aria-label="关闭">×</button>
+      <div class="card-type" id="cardType">祝福</div>
+      <div class="card-star">★</div>
+      <div id="cardText">诗句内容</div>
+      <div id="cardAuthor">作者</div>
+      <div class="card-footer">国庆 · 锦绣诗球</div>
+    </div>
+  </div>
+
+  <!-- CDN 加载失败兜底提示（普通脚本，不依赖模块）-->
+  <script>
+    window.__poemBallReady = false;
+    setTimeout(function(){
+      if(!window.__poemBallReady){
+        var l=document.getElementById('loader');
+        if(l && !l.classList.contains('hide')){
+          l.classList.add('err');
+          l.querySelector('.lt').textContent='资源加载失败';
+          document.getElementById('loaderTip').innerHTML='无法从 CDN 加载 Three.js，请检查网络连接后刷新页面。<br/>（本项目需联网加载 three@0.160.0）';
+        }
+      }
+    }, 15000);
+  </script>
+
+  <!-- Three.js 依赖映射（最新稳定版 CDN，无需构建工具）-->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+  // ============================================================
+  //  国庆 · 锦绣诗球  ——  单文件 3D 交互网站
+  //  技术栈：Three.js 0.160.0（CDN / ES Module / importmap）
+  //  包含：程序化国庆球体 + 星空 + 77句诗词精灵 + 1949金粒子
+  //        + 拖拽/缩放/双击交互 + 泛光后处理 + 画质自适应
+  // ============================================================
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+  import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+  import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+  import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+  import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+  // ==================== 全局配置 ====================
+  const COLOR = { red: 0xC8102E, redDeep: 0x8E0B1E, gold: 0xFFD700, space: 0x0A0A14 };
+  const PLANET_RADIUS = 1.0;   // 星球半径
+  const TEXT_RADIUS   = 1.17;  // 文字精灵所在球面半径（略高于表面）
+  const GOLD_RADIUS   = 1.015; // 1949 金粒子所在半径
+  const STAR_COUNT_BASE   = 3600;  // 星空粒子基准数量（>=3000）
+  const SURF_PARTICLE_BASE= 1949;  // 表面金粒子（固定寓意 1949）
+  const FIREWORK_BASE     = 300;   // 烟花上升粒子（<=300）
+
+  // 设备/环境探测
+  const UA = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile|HarmonyOS/i.test(UA) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(UA));
+
+  // 当前画质：high | medium | low
+  let QUALITY = isMobile ? 'medium' : 'high';
+  // 各画质倍率：影响星空数量、像素比、是否开启泛光
+  const QUALITY_CFG = {
+    high:   { starScale: 1.0, pixelRatio: Math.min(devicePixelRatio, 2),   bloom: true,  bloomStrength: 0.62, surfScale: 1.0,  firework: 1.0 },
+    medium: { starScale: 0.6, pixelRatio: Math.min(devicePixelRatio, 1.5), bloom: true,  bloomStrength: 0.45, surfScale: 0.7,  firework: 0.6 },
+    low:    { starScale: 0.34,pixelRatio: 1,                             bloom: false, bloomStrength: 0.0,  surfScale: 0.42, firework: 0.34 }
+  };
+
+  // ==================== 77 句国庆诗词 / 祝福数据 ====================
+  // 结构：{ text: 文本, author: 作者, type: '祝福' | '诗词' }
+  // 说明：先用内置数组，后续可替换为 fetch('data/poems.json')
+  const POEMS = [
+    // ---------- 国庆祝福（30 句）----------
+    { text:'我爱你，中国', author:'国庆祝福', type:'祝福' },
+    { text:'锦绣中华，盛世华诞', author:'国庆祝福', type:'祝福' },
+    { text:'国泰民安，繁荣昌盛', author:'国庆祝福', type:'祝福' },
+    { text:'山河无恙，人间皆安', author:'国庆祝福', type:'祝福' },
+    { text:'五星闪耀，皆为信仰', author:'国庆祝福', type:'祝福' },
+    { text:'愿以吾辈之青春，捍卫盛世之中华', author:'国庆祝福', type:'祝福' },
+    { text:'祝福祖国，繁荣昌盛', author:'国庆祝福', type:'祝福' },
+    { text:'神州大地，繁花似锦', author:'国庆祝福', type:'祝福' },
+    { text:'举国同庆，盛世中华', author:'国庆祝福', type:'祝福' },
+    { text:'山河远阔，国泰民安', author:'国庆祝福', type:'祝福' },
+    { text:'盛世华诞，荣耀中华', author:'国庆祝福', type:'祝福' },
+    { text:'华夏儿女，同心筑梦', author:'国庆祝福', type:'祝福' },
+    { text:'锦绣山河，大美中华', author:'国庆祝福', type:'祝福' },
+    { text:'百年华诞，风华正茂', author:'国庆祝福', type:'祝福' },
+    { text:'国强家盛，民富安康', author:'国庆祝福', type:'祝福' },
+    { text:'龙腾盛世，凤舞九天', author:'国庆祝福', type:'祝福' },
+    { text:'江山锦绣，岁月峥嵘', author:'国庆祝福', type:'祝福' },
+    { text:'与国同梦，与时代同行', author:'国庆祝福', type:'祝福' },
+    { text:'何其有幸，生于华夏', author:'国庆祝福', type:'祝福' },
+    { text:'生于红旗下，长在春风里', author:'国庆祝福', type:'祝福' },
+    { text:'目光所至皆为华夏，五星闪耀皆为信仰', author:'国庆祝福', type:'祝福' },
+    { text:'我和我的祖国，一刻也不能分割', author:'国庆祝福', type:'祝福' },
+    { text:'五星红旗迎风飘扬，胜利歌声多么响亮', author:'国庆祝福', type:'祝福' },
+    { text:'歌唱我们亲爱的祖国，从今走向繁荣富强', author:'国庆祝福', type:'祝福' },
+    { text:'如果信仰有颜色，那一定是中国红', author:'国庆祝福', type:'祝福' },
+    { text:'清澈的爱，只为中国', author:'国庆祝福', type:'祝福' },
+    { text:'人民有信仰，国家有力量，民族有希望', author:'国庆祝福', type:'祝福' },
+    { text:'盛世中华，如你所愿', author:'国庆祝福', type:'祝福' },
+    { text:'千秋作卷，山河为答', author:'国庆祝福', type:'祝福' },
+    { text:'愿祖国繁荣昌盛，愿人民幸福安康', author:'国庆祝福', type:'祝福' },
+    // ---------- 爱国诗词（47 句）----------
+    { text:'江山如此多娇，引无数英雄竞折腰', author:'毛泽东', type:'诗词' },
+    { text:'红军不怕远征难，万水千山只等闲', author:'毛泽东', type:'诗词' },
+    { text:'数风流人物，还看今朝', author:'毛泽东', type:'诗词' },
+    { text:'为有牺牲多壮志，敢教日月换新天', author:'毛泽东', type:'诗词' },
+    { text:'不到长城非好汉', author:'毛泽东', type:'诗词' },
+    { text:'问苍茫大地，谁主沉浮', author:'毛泽东', type:'诗词' },
+    { text:'恰同学少年，风华正茂', author:'毛泽东', type:'诗词' },
+    { text:'一万年太久，只争朝夕', author:'毛泽东', type:'诗词' },
+    { text:'世上无难事，只要肯登攀', author:'毛泽东', type:'诗词' },
+    { text:'可上九天揽月，可下五洋捉鳖', author:'毛泽东', type:'诗词' },
+    { text:'为什么我的眼里常含泪水？因为我对这土地爱得深沉', author:'艾青', type:'诗词' },
+    { text:'人生自古谁无死？留取丹心照汗青', author:'文天祥', type:'诗词' },
+    { text:'山河破碎风飘絮，身世浮沉雨打萍', author:'文天祥', type:'诗词' },
+    { text:'三十功名尘与土，八千里路云和月', author:'岳飞', type:'诗词' },
+    { text:'待从头、收拾旧山河，朝天阙', author:'岳飞', type:'诗词' },
+    { text:'少年强则国强', author:'梁启超', type:'诗词' },
+    { text:'美哉我少年中国，与天不老', author:'梁启超', type:'诗词' },
+    { text:'苟利国家生死以，岂因祸福避趋之', author:'林则徐', type:'诗词' },
+    { text:'路漫漫其修远兮，吾将上下而求索', author:'屈原', type:'诗词' },
+    { text:'亦余心之所善兮，虽九死其犹未悔', author:'屈原', type:'诗词' },
+    { text:'长太息以掩涕兮，哀民生之多艰', author:'屈原', type:'诗词' },
+    { text:'国破山河在，城春草木深', author:'杜甫', type:'诗词' },
+    { text:'安得广厦千万间，大庇天下寒士俱欢颜', author:'杜甫', type:'诗词' },
+    { text:'但使龙城飞将在，不教胡马度阴山', author:'王昌龄', type:'诗词' },
+    { text:'黄沙百战穿金甲，不破楼兰终不还', author:'王昌龄', type:'诗词' },
+    { text:'报君黄金台上意，提携玉龙为君死', author:'李贺', type:'诗词' },
+    { text:'男儿何不带吴钩，收取关山五十州', author:'李贺', type:'诗词' },
+    { text:'王师北定中原日，家祭无忘告乃翁', author:'陆游', type:'诗词' },
+    { text:'位卑未敢忘忧国', author:'陆游', type:'诗词' },
+    { text:'夜阑卧听风吹雨，铁马冰河入梦来', author:'陆游', type:'诗词' },
+    { text:'醉里挑灯看剑，梦回吹角连营', author:'辛弃疾', type:'诗词' },
+    { text:'了却君王天下事，赢得生前身后名', author:'辛弃疾', type:'诗词' },
+    { text:'想当年，金戈铁马，气吞万里如虎', author:'辛弃疾', type:'诗词' },
+    { text:'先天下之忧而忧，后天下之乐而乐', author:'范仲淹', type:'诗词' },
+    { text:'天下兴亡，匹夫有责', author:'顾炎武', type:'诗词' },
+    { text:'粉骨碎身浑不怕，要留清白在人间', author:'于谦', type:'诗词' },
+    { text:'一寸丹心图报国，两行清泪为思亲', author:'于谦', type:'诗词' },
+    { text:'长风破浪会有时，直挂云帆济沧海', author:'李白', type:'诗词' },
+    { text:'中夜四五叹，常为大国忧', author:'李白', type:'诗词' },
+    { text:'捐躯赴国难，视死忽如归', author:'曹植', type:'诗词' },
+    { text:'商女不知亡国恨，隔江犹唱后庭花', author:'杜牧', type:'诗词' },
+    { text:'只解沙场为国死，何须马革裹尸还', author:'徐锡麟', type:'诗词' },
+    { text:'身既死兮神以灵，魂魄毅兮为鬼雄', author:'屈原', type:'诗词' },
+    { text:'山河千古在，城郭一时非', author:'文天祥', type:'诗词' },
+    { text:'一寸山河一寸血，十万青年十万军', author:'抗战标语', type:'诗词' },
+    { text:'大江歌罢掉头东，邃密群科济世穷', author:'周恩来', type:'诗词' },
+    { text:'面壁十年图破壁，难酬蹈海亦英雄', author:'周恩来', type:'诗词' }
+  ];
+
+  // ==================== 基础场景 / 相机 / 渲染器 ====================
+  const canvas = document.getElementById('scene');
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(COLOR.space);
+
+  const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 200);
+  camera.position.set(0, 0.35, 3.5);
+
+  const renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: !isIOS,          // iOS Safari 关闭抗锯齿以保证性能
+    alpha: false,
+    powerPreference: 'high-performance'
+  });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(QUALITY_CFG[QUALITY].pixelRatio);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
+
+  // 灯光：环境光打底 + 方向光塑形 + 金色点光源渲染节日氛围
+  scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+  const dirLight = new THREE.DirectionalLight(0xffffff, 1.25);
+  dirLight.position.set(5, 3.5, 5);
+  scene.add(dirLight);
+  const rimLight = new THREE.DirectionalLight(0xFFD700, 0.55);  // 金色轮廓光
+  rimLight.position.set(-4, -2, -3);
+  scene.add(rimLight);
+  const goldPoint = new THREE.PointLight(0xFFB300, 0.7, 25);
+  goldPoint.position.set(-2.5, 2, 3);
+  scene.add(goldPoint);
+
+  // 星球组：球体 + 表面粒子 + 文字精灵都挂在这里，整体自转
+  const planetGroup = new THREE.Group();
+  scene.add(planetGroup);
+
+  // ==================== 程序化国庆球体纹理 ====================
+  // 在 Canvas 上绘制：中国红底 + 金色五角星 + 长城剪影 + 华表 + 烟花 + 祥云海浪
+  function drawStar(ctx, cx, cy, spikes, outerR, innerR, rot = 0){
+    let x = cx, y = cy;
+    ctx.beginPath();
+    for(let i = 0; i < spikes * 2; i++){
+      const r = i % 2 === 0 ? outerR : innerR;
+      const a = rot + (Math.PI / spikes) * i - Math.PI / 2;
+      x = cx + Math.cos(a) * r; y = cy + Math.sin(a) * r;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  function createPlanetTexture(){
+    const W = 2048, H = 1024;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+
+    // 1) 中国红纵向渐变底色（上下略深，中间鲜亮）
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0.0, '#7E0A1B');
+    bg.addColorStop(0.28,'#B30E28');
+    bg.addColorStop(0.5, '#D2122E');
+    bg.addColorStop(0.72,'#B30E28');
+    bg.addColorStop(1.0, '#7E0A1B');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+    // 2) 中央暖光晕（模拟球面受光）
+    const glow = ctx.createRadialGradient(W*0.5, H*0.42, 40, W*0.5, H*0.42, W*0.55);
+    glow.addColorStop(0, 'rgba(255,120,90,0.30)');
+    glow.addColorStop(1, 'rgba(255,60,60,0)');
+    ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+
+    // 3) 金色经纬装饰细线
+    ctx.strokeStyle = 'rgba(255,215,0,0.10)'; ctx.lineWidth = 2;
+    for(let i = 1; i < 12; i++){ const x = W/12*i; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+    for(let i = 1; i < 6; i++){ const y = H/6*i; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+    // 4) 顶部与底部金色回纹饰带
+    const bandGrad = ctx.createLinearGradient(0,0,W,0);
+    bandGrad.addColorStop(0,'rgba(255,215,0,0.0)');
+    bandGrad.addColorStop(0.5,'rgba(255,215,0,0.55)');
+    bandGrad.addColorStop(1,'rgba(255,215,0,0.0)');
+    ctx.fillStyle = bandGrad;
+    ctx.fillRect(0, H*0.055, W, 5);
+    ctx.fillRect(0, H*0.915, W, 5);
+
+    // 5) 散布金色五角星（大五星 + 小星群，寓意五星红旗）
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,215,0,0.9)'; ctx.shadowBlur = 24;
+    // 若干主星
+    const bigStars = [[W*0.14,H*0.30,52],[W*0.5,H*0.20,64],[W*0.86,H*0.30,52],[W*0.30,H*0.62,34],[W*0.70,H*0.62,34]];
+    bigStars.forEach(([sx,sy,sr])=>{
+      ctx.fillStyle = 'rgba(255,225,120,0.92)';
+      drawStar(ctx, sx, sy, 5, sr, sr*0.42); ctx.fill();
+    });
+    // 小星点缀
+    ctx.fillStyle = 'rgba(255,215,0,0.75)';
+    for(let i = 0; i < 90; i++){
+      const sx = Math.random()*W, sy = Math.random()*H*0.86, sr = 4 + Math.random()*9;
+      drawStar(ctx, sx, sy, 5, sr, sr*0.42, Math.random()*Math.PI); ctx.fill();
+    }
+    ctx.restore();
+
+    // 6) 长城剪影（沿球体下部横贯，含垛口与烽火台）
+    const wallY = H*0.70;
+    ctx.save();
+    ctx.fillStyle = 'rgba(60,6,16,0.55)';
+    ctx.strokeStyle = 'rgba(255,215,0,0.30)'; ctx.lineWidth = 2;
+    // 起伏的城墙基线
+    ctx.beginPath(); ctx.moveTo(0, wallY+40);
+    for(let x = 0; x <= W; x += 32){
+      const y = wallY + Math.sin(x*0.006)*26 + Math.sin(x*0.017)*10;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
+    // 垛口
+    ctx.fillStyle = 'rgba(40,4,12,0.6)';
+    for(let x = 0; x < W; x += 46){
+      const y = wallY + Math.sin(x*0.006)*26 + Math.sin(x*0.017)*10;
+      ctx.fillRect(x, y-16, 22, 18);
+    }
+    // 烽火台（两座）
+    [W*0.28, W*0.72].forEach(tx=>{
+      const ty = wallY + Math.sin(tx*0.006)*26 - 6;
+      ctx.fillStyle = 'rgba(48,5,14,0.72)';
+      ctx.beginPath();
+      ctx.moveTo(tx-42, ty+30); ctx.lineTo(tx-30, ty-46); ctx.lineTo(tx+30, ty-46); ctx.lineTo(tx+42, ty+30);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,215,0,0.5)';
+      for(let i=-1;i<=1;i++) ctx.fillRect(tx+i*20-4, ty-40, 8, 10);
+    });
+    ctx.restore();
+
+    // 7) 烟花绽放（金色放射线 + 光点）
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const fireworks = [[W*0.20,H*0.44,70],[W*0.62,H*0.36,86],[W*0.84,H*0.50,60],[W*0.42,H*0.52,54]];
+    fireworks.forEach(([fx,fy,fr])=>{
+      for(let i = 0; i < 26; i++){
+        const a = Math.PI*2/26*i;
+        const len = fr*(0.6 + Math.random()*0.5);
+        const grd = ctx.createLinearGradient(fx, fy, fx+Math.cos(a)*len, fy+Math.sin(a)*len);
+        grd.addColorStop(0,'rgba(255,240,180,0.85)');
+        grd.addColorStop(1,'rgba(255,180,0,0)');
+        ctx.strokeStyle = grd; ctx.lineWidth = 2.2;
+        ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(fx+Math.cos(a)*len, fy+Math.sin(a)*len); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,235,160,0.9)';
+        ctx.beginPath(); ctx.arc(fx+Math.cos(a)*len, fy+Math.sin(a)*len, 2.4, 0, Math.PI*2); ctx.fill();
+      }
+    });
+    ctx.restore();
+
+    // 8) 底部海浪/祥云纹（金色弧线）
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,215,0,0.22)'; ctx.lineWidth = 3;
+    for(let r = 0; r < 5; r++){
+      ctx.beginPath();
+      for(let x = 0; x <= W; x += 20){
+        const y = H*0.955 - r*11 + Math.sin(x*0.02 + r)*6;
+        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    return tex;
+  }
+
+  // ==================== 星球本体 ====================
+  const planetTex = createPlanetTexture();
+  const planetGeo = new THREE.SphereGeometry(PLANET_RADIUS, isMobile ? 48 : 64, isMobile ? 48 : 64);
+  const planetMat = new THREE.MeshStandardMaterial({
+    map: planetTex,
+    color: 0xffffff,
+    emissive: new THREE.Color(0x5A0713),  // 自体微红发光
+    emissiveIntensity: 0.55,
+    roughness: 0.55,
+    metalness: 0.25
+  });
+  const planet = new THREE.Mesh(planetGeo, planetMat);
+  planetGroup.add(planet);
+
+  // ==================== 金色边缘光晕（Fresnel 外壳）====================
+  const glowMat = new THREE.ShaderMaterial({
+    uniforms: { glowColor: { value: new THREE.Color(COLOR.gold) }, power: { value: 2.6 } },
+    vertexShader: `
+      varying vec3 vNormal;
+      void main(){
+        vNormal = normalize(normalMatrix * normal);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform vec3 glowColor; uniform float power;
+      varying vec3 vNormal;
+      void main(){
+        float intensity = pow(0.72 - dot(vNormal, vec3(0.0, 0.0, 1.0)), power);
+        gl_FragColor = vec4(glowColor, 1.0) * intensity;
+      }`,
+    side: THREE.BackSide,
+    blending: THREE.AdditiveBlending,
+    transparent: true,
+    depthWrite: false
+  });
+  const glowShell = new THREE.Mesh(new THREE.SphereGeometry(PLANET_RADIUS * 1.22, 48, 48), glowMat);
+  planetGroup.add(glowShell);
+
+
+  // ==================== 圆形粒子贴图（径向渐变，供星空/粒子复用）====================
+  function makeCircleTexture(){
+    const s = 64; const c = document.createElement('canvas'); c.width = c.height = s;
+    const x = c.getContext('2d');
+    const g = x.createRadialGradient(s/2, s/2, 0, s/2, s/2, s/2);
+    g.addColorStop(0.0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.25,'rgba(255,255,255,0.92)');
+    g.addColorStop(0.55,'rgba(255,255,255,0.28)');
+    g.addColorStop(1.0, 'rgba(255,255,255,0)');
+    x.fillStyle = g; x.fillRect(0, 0, s, s);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+  const circleTex = makeCircleTexture();
+
+  // ==================== 深空星空（>=3000 粒子，球壳内随机分布）====================
+  let starField;
+  function createStarField(maxCount){
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(maxCount * 3);
+    const col = new Float32Array(maxCount * 3);
+    const c = new THREE.Color();
+    for(let i = 0; i < maxCount; i++){
+      const r = 8 + Math.random() * 40;                 // 半径 8~48 的球壳
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      pos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+      pos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+      pos[i*3+2] = r * Math.cos(phi);
+      const t = Math.random();
+      if(t > 0.86) c.setHSL(0.12, 0.95, 0.62 + Math.random()*0.18);      // 少量金色星
+      else if(t > 0.7) c.setHSL(0.02, 0.7, 0.7);                          // 少量暖红星
+      else c.setHSL(0.09 + Math.random()*0.08, 0.25, 0.86 + Math.random()*0.14); // 暖白
+      col[i*3] = c.r; col[i*3+1] = c.g; col[i*3+2] = c.b;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const mat = new THREE.PointsMaterial({
+      size: 0.16, sizeAttenuation: true, map: circleTex, vertexColors: true,
+      transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending
+    });
+    const pts = new THREE.Points(geo, mat);
+    pts.frustumCulled = false;   // 星空包裹全场景，关闭整体裁剪
+    return pts;
+  }
+  starField = createStarField(STAR_COUNT_BASE);
+  scene.add(starField);
+
+  // ==================== 1949 金色表面粒子（BufferGeometry + Points）====================
+  let surfacePoints;
+  function createSurfaceParticles(count){
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(count * 3);
+    for(let i = 0; i < count; i++){
+      const u = Math.random(), v = Math.random();
+      const theta = 2 * Math.PI * u;
+      const phi = Math.acos(2 * v - 1);
+      const r = GOLD_RADIUS + (Math.random() - 0.5) * 0.012;
+      pos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+      pos[i*3+1] = r * Math.cos(phi);
+      pos[i*3+2] = r * Math.sin(phi) * Math.sin(theta);
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({
+      size: 0.028, map: circleTex, color: COLOR.gold, transparent: true, opacity: 0.92,
+      depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true
+    });
+    return new THREE.Points(geo, mat);
+  }
+  surfacePoints = createSurfaceParticles(SURF_PARTICLE_BASE);
+  surfacePoints.frustumCulled = false;
+  planetGroup.add(surfacePoints);   // 随星球一起自转
+
+  // ==================== 上升金色烟花粒子（<=300）====================
+  const fireworks = { pts: null, vel: null, count: FIREWORK_BASE, top: 3.2, bottom: -3.2 };
+  function createFireworks(count){
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(count * 3);
+    const vel = new Float32Array(count);
+    for(let i = 0; i < count; i++){
+      pos[i*3]   = (Math.random() - 0.5) * 7.5;
+      pos[i*3+1] = fireworks.bottom + Math.random() * (fireworks.top - fireworks.bottom);
+      pos[i*3+2] = (Math.random() - 0.5) * 7.5;
+      vel[i] = 0.006 + Math.random() * 0.016;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({
+      size: 0.05, map: circleTex, color: 0xFFE08A, transparent: true, opacity: 0.85,
+      depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true
+    });
+    const pts = new THREE.Points(geo, mat);
+    pts.frustumCulled = false;
+    fireworks.vel = vel; fireworks.pts = pts;
+    return pts;
+  }
+  scene.add(createFireworks(FIREWORK_BASE));
+
+  // ==================== 77 句诗词文字精灵（Fibonacci 球面均匀分布）====================
+  const texCache = new WeakMap();      // 纹理缓存（WeakMap，随 poem 对象回收）
+  const textSprites = [];              // 所有文字精灵
+  const _tmpVec = new THREE.Vector3();
+
+  // 文本按标点/长度换行（避免使用 lookbehind，兼容旧版 iOS Safari）
+  function wrapText(text, maxPerLine){
+    const puncts = '，。！？、；：';
+    const parts = []; let buf = '';
+    for(const ch of text){ buf += ch; if(puncts.indexOf(ch) >= 0){ parts.push(buf); buf = ''; } }
+    if(buf) parts.push(buf);
+    const lines = []; let cur = '';
+    parts.forEach(p => {
+      if((cur + p).length <= maxPerLine) cur += p;
+      else {
+        if(cur) lines.push(cur);
+        let q = p;
+        while(q.length > maxPerLine){ lines.push(q.slice(0, maxPerLine)); q = q.slice(maxPerLine); }
+        cur = q;
+      }
+    });
+    if(cur) lines.push(cur);
+    return lines.length ? lines : [text];
+  }
+
+  // 用 Canvas 动态生成金色发光文字纹理
+  function makeTextTexture(poem){
+    const cached = texCache.get(poem);
+    if(cached) return cached;
+    const dpr = 2, fontSize = 34, lineH = fontSize * 1.3, padX = 16, padY = 14;
+    const lines = wrapText(poem.text, 10);
+    const mctx = document.createElement('canvas').getContext('2d');
+    mctx.font = `bold ${fontSize}px "Microsoft YaHei","STKaiti",sans-serif`;
+    let maxW = 0; lines.forEach(l => maxW = Math.max(maxW, mctx.measureText(l).width));
+    const wCss = Math.ceil(maxW + padX * 2);
+    const hCss = Math.ceil(lines.length * lineH + padY * 2);
+    const c = document.createElement('canvas');
+    c.width = Math.ceil(wCss * dpr); c.height = Math.ceil(hCss * dpr);
+    const ctx = c.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.font = `bold ${fontSize}px "Microsoft YaHei","STKaiti",sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    // 先深色描边增强与红球的对比
+    ctx.shadowBlur = 0; ctx.lineWidth = 4.5; ctx.strokeStyle = 'rgba(60,4,14,0.65)';
+    lines.forEach((l, i) => ctx.strokeText(l, wCss/2, padY + lineH*i + lineH/2));
+    // 再金色填充 + 发光
+    ctx.shadowColor = 'rgba(255,190,50,0.95)'; ctx.shadowBlur = 16;
+    ctx.fillStyle = '#FFEBAE';
+    lines.forEach((l, i) => ctx.fillText(l, wCss/2, padY + lineH*i + lineH/2));
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+    const result = { tex, wCss, hCss };
+    texCache.set(poem, result);
+    return result;
+  }
+
+  // Fibonacci 球面均匀分布，避免极点聚集
+  function fibonacciSphere(n, radius){
+    const pts = [];
+    const ga = Math.PI * (3 - Math.sqrt(5));   // 黄金角
+    for(let i = 0; i < n; i++){
+      const y = 1 - (i / (n - 1)) * 2;         // 1 -> -1
+      const r = Math.sqrt(Math.max(0, 1 - y*y));
+      const theta = ga * i;
+      pts.push(new THREE.Vector3(Math.cos(theta) * r * radius, y * radius, Math.sin(theta) * r * radius));
+    }
+    return pts;
+  }
+
+  const WORLD_PER_PX = 0.0016;   // Canvas CSS 像素 → 世界单位 的换算比例
+  function createTextSprites(){
+    const positions = fibonacciSphere(POEMS.length, TEXT_RADIUS);
+    POEMS.forEach((poem, i) => {
+      const { tex, wCss, hCss } = makeTextTexture(poem);
+      const mat = new THREE.SpriteMaterial({
+        map: tex, transparent: true, depthWrite: false, depthTest: true, opacity: 0.96
+      });
+      const sprite = new THREE.Sprite(mat);
+      sprite.position.copy(positions[i]);
+      const sw = wCss * WORLD_PER_PX, sh = hCss * WORLD_PER_PX;
+      sprite.scale.set(sw, sh, 1);
+      sprite.userData = { poem, baseW: sw, baseH: sh, phase: Math.random() * Math.PI * 2, normal: positions[i].clone().normalize() };
+      planetGroup.add(sprite);
+      textSprites.push(sprite);
+    });
+  }
+  createTextSprites();
+
+  // ==================== 轨道控制器（阻尼 + 惯性）====================
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.rotateSpeed = 0.55;
+  controls.zoomSpeed = 0.85;
+  controls.enablePan = false;
+  controls.minDistance = 1.7;
+  controls.maxDistance = 8;
+  controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
+
+  // ==================== 自动旋转（四元数，避免万向节死锁）====================
+  const spinAxis = new THREE.Vector3(0, 1, 0);
+  const spinQuat = new THREE.Quaternion();
+  const SPIN_SPEED = 0.075;          // 弧度/秒，缓慢自转
+  let autoSpin = true;
+  let idleTimer = null;
+  controls.addEventListener('start', () => { autoSpin = false; if(idleTimer) clearTimeout(idleTimer); });
+  controls.addEventListener('end',   () => { if(idleTimer) clearTimeout(idleTimer); idleTimer = setTimeout(() => autoSpin = true, 3000); });
+
+  // ==================== 双击拾取（Raycaster 检测 Sprite）====================
+  const raycaster = new THREE.Raycaster();
+  const pointerNdc = new THREE.Vector2();
+  let downInfo = null;
+    let lastTap = null;                 // 上一次有效单击，用于检测双击
+    const DBL_MS = 350, DBL_DIST = 30;  // 双击的时间阈值(ms)与两次点击最大间距(px)
+  const cardMask = document.getElementById('cardMask');
+
+  renderer.domElement.addEventListener('pointerdown', e => {
+    downInfo = { x: e.clientX, y: e.clientY, t: performance.now() };
+  });
+  renderer.domElement.addEventListener('pointerup', e => {
+    if(!downInfo) return;
+    const dx = e.clientX - downInfo.x, dy = e.clientY - downInfo.y;
+    const moved = Math.hypot(dx, dy), dt = performance.now() - downInfo.t;
+    downInfo = null;
+    if(moved < 9 && dt < 450){                                    // 位移小 + 时间短 = 一次有效单击
+          const now = performance.now();
+          if(lastTap && now - lastTap.t < DBL_MS &&
+             Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < DBL_DIST){
+            lastTap = null;                                        // 两次快速单击 = 双击 → 拾取诗句
+            pickAt(e.clientX, e.clientY);
+          }else{
+            lastTap = { x: e.clientX, y: e.clientY, t: now };      // 记录第一次单击，等待第二次
+          }
+        }else{
+          lastTap = null;                                          // 拖拽/长按不构成单击 → 重置双击计时
+        }
+  });
+
+  function pickAt(cx, cy){
+    pointerNdc.x = (cx / innerWidth) * 2 - 1;
+    pointerNdc.y = -(cy / innerHeight) * 2 + 1;
+    raycaster.setFromCamera(pointerNdc, camera);
+    const visible = textSprites.filter(s => s.visible);
+    const hits = raycaster.intersectObjects(visible, false);
+    if(hits.length) showCard(hits[0].object.userData.poem);
+  }
+
+  // ==================== 诗句详情卡片 ====================
+  const elType = document.getElementById('cardType');
+  const elText = document.getElementById('cardText');
+  const elAuthor = document.getElementById('cardAuthor');
+  function showCard(poem){
+    elType.textContent = poem.type;
+    elText.textContent = poem.text;
+    elAuthor.textContent = poem.author;
+    cardMask.classList.add('show');
+    controls.enabled = false;   // 卡片打开时暂停旋转，避免误操作
+  }
+  function hideCard(){ cardMask.classList.remove('show'); controls.enabled = true; }
+  document.getElementById('cardClose').addEventListener('click', hideCard);
+  cardMask.addEventListener('click', e => { if(e.target === cardMask) hideCard(); });
+  window.addEventListener('keydown', e => { if(e.key === 'Escape') hideCard(); });
+
+  // ==================== 泛光后处理（UnrealBloomPass）====================
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), QUALITY_CFG[QUALITY].bloomStrength, 0.5, 0.82);
+  composer.addPass(bloomPass);
+  composer.addPass(new OutputPass());
+  composer.setPixelRatio(QUALITY_CFG[QUALITY].pixelRatio);
+  let useBloom = QUALITY_CFG[QUALITY].bloom;
+
+  // ==================== 画质系统 + 帧率自适应 ====================
+  const QLABEL = { high: '高清', medium: '流畅', low: '省电' };
+  const statsEl = document.getElementById('stats');
+  const qButtons = [...document.querySelectorAll('#qualityBar button')];
+
+  function applyQuality(q, fromUser){
+    QUALITY = q; const cfg = QUALITY_CFG[q];
+    renderer.setPixelRatio(cfg.pixelRatio);
+    composer.setPixelRatio(cfg.pixelRatio);
+    // 星空：用 drawRange 控制绘制数量（几何体只创建一次）
+    starField.geometry.setDrawRange(0, Math.floor(STAR_COUNT_BASE * cfg.starScale));
+    // 表面金粒子
+    surfacePoints.geometry.setDrawRange(0, Math.floor(SURF_PARTICLE_BASE * cfg.surfScale));
+    // 烟花粒子
+    fireworks.pts.geometry.setDrawRange(0, Math.floor(FIREWORK_BASE * cfg.firework));
+    // 泛光开关
+    useBloom = cfg.bloom; bloomPass.strength = cfg.bloomStrength;
+    // 按钮高亮
+    qButtons.forEach(b => b.classList.toggle('active', b.dataset.q === q));
+    if(fromUser) statsEl.textContent = '画质：' + QLABEL[q];
+  }
+  qButtons.forEach(b => b.addEventListener('click', () => { autoDowngrade = false; applyQuality(b.dataset.q, true); }));
+
+  let autoDowngrade = true;   // 用户手动选择后停止自动降级
+  function downgrade(){
+    if(QUALITY === 'high') applyQuality('medium');
+    else if(QUALITY === 'medium') applyQuality('low');
+  }
+
+  // ==================== 文字精灵：背面裁剪 + 呼吸动画 ====================
+  const _camDir = new THREE.Vector3();
+  function updateTextSprites(time){
+    planetGroup.updateMatrixWorld();
+    const camPos = camera.position;
+    for(let i = 0; i < textSprites.length; i++){
+      const s = textSprites[i];
+      s.getWorldPosition(_tmpVec);
+      // 法线（球心→精灵），与「精灵→相机」方向点积 > 0 才在可见半球
+      _camDir.copy(camPos).sub(_tmpVec).normalize();
+      const normal = _tmpVec.clone().normalize();
+      const facing = normal.dot(_camDir);
+      s.visible = facing > 0.12;
+      if(!s.visible) continue;
+      // 呼吸：轻微缩放 + 透明度浮动；边缘处淡出更自然
+      const breath = 1 + Math.sin(time * 1.6 + s.userData.phase) * 0.07;
+      const edge = THREE.MathUtils.clamp((facing - 0.12) / 0.35, 0, 1);
+      s.scale.set(s.userData.baseW * breath, s.userData.baseH * breath, 1);
+      s.material.opacity = (0.55 + 0.45 * edge) * (0.9 + 0.1 * Math.sin(time * 2 + s.userData.phase));
+    }
+  }
+
+  // ==================== 烟花上升动画 ====================
+  function updateFireworks(dt){
+    const pos = fireworks.pts.geometry.attributes.position;
+    const arr = pos.array, vel = fireworks.vel;
+    const n = fireworks.pts.geometry.drawRange.count === Infinity ? fireworks.count : fireworks.pts.geometry.drawRange.count;
+    for(let i = 0; i < n; i++){
+      arr[i*3+1] += vel[i] * dt * 60;
+      if(arr[i*3+1] > fireworks.top){
+        arr[i*3+1] = fireworks.bottom;
+        arr[i*3]   = (Math.random() - 0.5) * 7.5;
+        arr[i*3+2] = (Math.random() - 0.5) * 7.5;
+      }
+    }
+    pos.needsUpdate = true;
+  }
+
+  // ==================== 主循环 ====================
+  const clock = new THREE.Clock();
+  let frames = 0, fpsTimer = performance.now(), lowStreak = 0;
+  function animate(){
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.05);
+    const t = clock.elapsedTime;
+
+    // 星球自转（四元数）
+    if(autoSpin){ spinQuat.setFromAxisAngle(spinAxis, SPIN_SPEED * dt); planetGroup.quaternion.premultiply(spinQuat); }
+    // 星空极缓慢旋转，营造深邃感
+    starField.rotation.y += dt * 0.004;
+    // 表面金粒子微闪
+    surfacePoints.material.opacity = 0.78 + Math.sin(t * 2.2) * 0.14;
+    // 光晕轻微脉动
+    glowMat.uniforms.power.value = 2.6 + Math.sin(t * 0.8) * 0.25;
+
+    updateTextSprites(t);
+    updateFireworks(dt);
+    controls.update();
+
+    if(useBloom) composer.render(); else renderer.render(scene, camera);
+
+    // 帧率监测：连续低于 30fps 自动降级
+    frames++;
+    const now = performance.now();
+    if(now - fpsTimer >= 1000){
+      const fps = frames * 1000 / (now - fpsTimer);
+      frames = 0; fpsTimer = now;
+      statsEl.textContent = `FPS ${fps.toFixed(0)} · ${QLABEL[QUALITY]}`;
+      if(autoDowngrade){
+        if(fps < 30){ lowStreak++; if(lowStreak >= 2){ downgrade(); lowStreak = 0; } }
+        else lowStreak = 0;
+      }
+    }
+  }
+
+  // ==================== 自适应窗口 ====================
+  function onResize(){
+    const w = innerWidth, h = innerHeight;
+    camera.aspect = w / h; camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+    composer.setSize(w, h);
+    bloomPass.setSize(w, h);
+  }
+  window.addEventListener('resize', onResize);
+  window.addEventListener('orientationchange', () => setTimeout(onResize, 200));
+
+  // ==================== 移动端：禁止页面滚动 / 双击缩放 / 手势缩放 ====================
+  document.addEventListener('gesturestart', e => e.preventDefault());
+  document.addEventListener('gesturechange', e => e.preventDefault());
+  document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', e => {
+    const now = Date.now();
+    if(now - lastTouchEnd <= 300) e.preventDefault();   // 拦截双击缩放
+    lastTouchEnd = now;
+  }, { passive: false });
+  document.addEventListener('touchmove', e => { if(e.touches.length > 1) e.preventDefault(); }, { passive: false });
+
+  // ==================== 启动 ====================
+  applyQuality(QUALITY);
+  onResize();
+  animate();
+  window.__poemBallReady = true;
+  // 隐藏加载动画
+  requestAnimationFrame(() => {
+    const loader = document.getElementById('loader');
+    loader.classList.add('hide');
+    setTimeout(() => loader.style.display = 'none', 850);
+  });
+  // 操作提示 9 秒后淡出
+  setTimeout(() => { const h = document.getElementById('hint'); if(h) h.style.opacity = '0'; }, 9000);
+
+  // 便捷调试入口：window.setQuality('low') 可在控制台切换画质
+  window.setQuality = q => { autoDowngrade = false; applyQuality(q, true); };
+  </script>
+</body>
+</html>
